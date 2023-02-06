@@ -8,6 +8,8 @@ import { SignInDto } from "./dto/sign-in.dto";
 import { JwtService } from "@nestjs/jwt";
 import jwtConfig from "../../../config/jwt.config";
 import { ConfigType } from "@nestjs/config";
+import { ActiveUserData } from "../interfaces/active-user.interface";
+import { RefreshTokenDto } from "./dto/refresh-token.dto";
 
 @Injectable()
 export class AuthenticationService {
@@ -55,18 +57,50 @@ export class AuthenticationService {
       throw new UnauthorizedException("Password does not match");
     }
 
-    const accessToken = await this.jwtService.signAsync({
-        sub: user.id,
-        email: user.email
-      }, {
-        audience: this.jwtConfiguration.audience,
-        issuer: this.jwtConfiguration.issuer,
-        secret: this.jwtConfiguration.secret
-      }
-    );
+    return await this.generateTokens(user);
+  }
+
+  async refreshTokens(refreshTokenDto: RefreshTokenDto) {
+    try {
+      const { sub } = await this.jwtService.verifyAsync<Pick<ActiveUserData, "sub">>(
+        refreshTokenDto.refreshToken, {
+          audience: this.jwtConfiguration.audience,
+          issuer: this.jwtConfiguration.issuer,
+          secret: this.jwtConfiguration.secret
+        });
+
+      const user = await this.usersRepository.findOneOrFail({ where: { id: sub } });
+
+      return await this.generateTokens(user);
+    } catch (err) {
+      throw new UnauthorizedException();
+    }
+
+  }
+
+  async generateTokens(user: User) {
+    const [accessToken, refreshToken] = await Promise.all([
+      this.signToken<Partial<ActiveUserData>>(user.id, this.jwtConfiguration.accessTokenTtl, { email: user.email }),
+      this.signToken<Partial<ActiveUserData>>(user.id, this.jwtConfiguration.refreshToken, { email: user.email })
+    ]);
 
     return {
-      accessToken
-    }
+      accessToken,
+      refreshToken
+    };
+  }
+
+  private signToken(userId: number, expiresIn: number, payload?: T) {
+    return this.jwtService.signAsync({
+        sub: userId,
+        ...payload
+      } as ActiveUserData,
+      {
+        audience: this.jwtConfiguration.audience,
+        issuer: this.jwtConfiguration.issuer,
+        secret: this.jwtConfiguration.secret,
+        expiresIn
+      }
+    );
   }
 }

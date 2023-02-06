@@ -2,6 +2,8 @@ import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/commo
 import { CofeeService } from './cofee.service';
 import { CreateCofeeDto } from './dto/create-cofee.dto';
 import { UpdateCofeeDto } from './dto/update-cofee.dto';
+import { ActiveUser } from "../iam/authentication/decorator/active-user.decorator";
+import { ActiveUserData } from "../iam/interfaces/active-user.interface";
 
 @Controller('cofee')
 export class CofeeController {
@@ -13,7 +15,8 @@ export class CofeeController {
   }
 
   @Get()
-  findAll() {
+  findAll(@ActiveUser user: ActiveUserData) {
+    console.log(user);
     return this.cofeeService.findAll();
   }
 
